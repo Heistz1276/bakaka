@@ -127,7 +127,7 @@ class Bot(commands.Bot):
         cancel_holder = discord.ui.LayoutView(timeout=None)
         cancel_holder.add_item(discord.ui.Container(discord.ui.ActionRow(cancel_button())))
         self.add_view(cancel_holder)
-        await self.tree.sync()
+        await sync_if_changed()
 
     async def on_ready(self):
         print(f"Logged in as {self.user} ({self.user.id})")
@@ -189,6 +189,14 @@ async def load_handshake():
             )
     except Exception as e:  # falls back to the standard handshake emoji
         print(f"Handshake emoji unavailable, using fallback: {e!r}")
+
+
+async def sync_if_changed():
+    """Only call Discord's sync endpoint when the command list actually changed."""
+    signature = ",".join(sorted(c.qualified_name for c in bot.tree.get_commands()))
+    if store.get_meta("command_signature") != signature:
+        await bot.tree.sync()
+        store.set_meta("command_signature", signature)
 
 
 def get_channel_id(key: str) -> int | None:
@@ -682,4 +690,10 @@ async def alliance_channel_cmd(interaction: discord.Interaction, channel: discor
 if __name__ == "__main__":
     if not TOKEN:
         raise SystemExit("Set DISCORD_TOKEN in your .env file.")
-    bot.run(TOKEN)
+    try:
+        bot.run(TOKEN)
+    except discord.HTTPException as e:
+        if e.status == 429 or "1015" in str(e):
+            print("Rate limited by Discord (Cloudflare 1015). Sleeping 30 minutes before exiting.")
+            time.sleep(1800)
+        raise
