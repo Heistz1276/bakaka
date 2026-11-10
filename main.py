@@ -10,7 +10,6 @@ import re
 import sqlite3
 import string
 import time
-from pathlib import Path
 
 import discord
 from discord import app_commands
@@ -21,14 +20,9 @@ load_dotenv()
 
 TOKEN = os.getenv("DISCORD_TOKEN")
 DB_PATH = os.getenv("DB_PATH", "alliances.sqlite3")
-HANDSHAKE_FILE = Path(__file__).with_name("handshake.png")
-BANNER_FILE = Path(__file__).with_name("banner.png")
-BANNER_NAME = "ura_banner.png"
-HANDSHAKE_FALLBACK_URL = "https://cdn.jsdelivr.net/gh/jdecked/twemoji@latest/assets/72x72/1f91d.png"
 MIN_MEMBERS = 50
 ACCENT = discord.Colour(0xC23B4E)
-
-HANDSHAKE_EMOJI: discord.Emoji | None = None  # application emoji made from handshake.png
+SHOW_SERVER_ICON = True  # set False to remove the allied server's icon from listings too
 
 DEFAULT_BIOS = {
     "clan": (
@@ -124,7 +118,6 @@ class Bot(commands.Bot):
         self.ready_once = False
 
     async def setup_hook(self):
-        await load_handshake()
         self.add_view(build_hub())
         await sync_if_changed()
 
@@ -134,8 +127,8 @@ class Bot(commands.Bot):
             self.ready_once = True
             try:
                 await ensure_panel()
-            except discord.HTTPException as e:
-                print(f"Could not refresh the panel: {e}")
+            except Exception as e:
+                print(f"Could not refresh the panel: {e!r}")
 
 
 bot = Bot()
@@ -166,30 +159,6 @@ def new_code() -> str:
             return code
 
 
-def hs_emoji():
-    return HANDSHAKE_EMOJI or "🤝"
-
-
-def hs_url() -> str:
-    return HANDSHAKE_EMOJI.url if HANDSHAKE_EMOJI else HANDSHAKE_FALLBACK_URL
-
-
-async def load_handshake():
-    """Create (once) an application emoji from handshake.png, used on buttons and as the panel image."""
-    global HANDSHAKE_EMOJI
-    try:
-        for emoji in await bot.fetch_application_emojis():
-            if emoji.name == "ura_handshake":
-                HANDSHAKE_EMOJI = emoji
-                return
-        if HANDSHAKE_FILE.exists():
-            HANDSHAKE_EMOJI = await bot.create_application_emoji(
-                name="ura_handshake", image=HANDSHAKE_FILE.read_bytes()
-            )
-    except Exception as e:  # falls back to the standard handshake emoji
-        print(f"Handshake emoji unavailable, using fallback: {e!r}")
-
-
 async def sync_if_changed():
     """Only call Discord's sync endpoint when the command list actually changed."""
     signature = ",".join(sorted(c.qualified_name for c in bot.tree.get_commands()))
@@ -205,10 +174,6 @@ def get_channel_id(key: str) -> int | None:
 
 async def get_channel(channel_id: int):
     return bot.get_channel(channel_id) or await bot.fetch_channel(channel_id)
-
-
-def banner_file() -> discord.File:
-    return discord.File(BANNER_FILE, filename=BANNER_NAME)
 
 
 def can_post(channel: discord.abc.GuildChannel) -> bool:
@@ -242,7 +207,7 @@ async def verify(link: str) -> dict:
         "name": clean(invite.guild.name)[:80] or "Unnamed server",
         "members": members,
         "online": invite.approximate_presence_count or 0,
-        "icon_url": icon.replace(size=256, static_format="png").url if icon else None,
+        "icon_url": icon.replace(size=256, static_format="png").url if (icon and SHOW_SERVER_ICON) else "",
     }
 
 
@@ -256,20 +221,18 @@ def guide_button() -> discord.ui.Button:
 def build_hub() -> discord.ui.LayoutView:
     view = discord.ui.LayoutView(timeout=None)
     c = discord.ui.Container(accent_colour=ACCENT)
-    c.add_item(discord.ui.MediaGallery(discord.MediaGalleryItem(f"attachment://{BANNER_NAME}")))
     c.add_item(discord.ui.Section(text("# Partnership Request"), accessory=guide_button()))
     c.add_item(
-        discord.ui.Section(
-            text(
-                "Wanna shake hands with a community like URA? We're a raiding community that "
-                "backs its allies when a fight turns unfair, and we're always open to clans "
-                "that fight the same way."
-            ),
-            text(
-                "If you want to ally with URA, make sure your server has **50+ members** "
-                "and is a **TSB related** server."
-            ),
-            accessory=discord.ui.Thumbnail(hs_url()),
+        text(
+            "Wanna shake hands with a community like URA? We're a raiding community that "
+            "backs its allies when a fight turns unfair, and we're always open to clans "
+            "that fight the same way."
+        )
+    )
+    c.add_item(
+        text(
+            "If you want to ally with URA, make sure your server has **50+ members** "
+            "and is a **TSB related** server."
         )
     )
     c.add_item(sep())
@@ -290,7 +253,7 @@ def build_hub() -> discord.ui.LayoutView:
     )
     c.add_item(sep())
     create = discord.ui.Button(
-        style=discord.ButtonStyle.secondary, label="Create Partnership", emoji=hs_emoji(), custom_id="ura:create"
+        style=discord.ButtonStyle.secondary, label="Create Partnership", emoji="🤝", custom_id="ura:create"
     )
     edit = discord.ui.Button(
         style=discord.ButtonStyle.secondary, label="Edit My Partnership", emoji="🎨", custom_id="ura:edit"
@@ -318,23 +281,23 @@ def ally_view(rec: dict, *, timeout=None, top=(), bottom=()) -> discord.ui.Layou
     for item in top:
         view.add_item(item)
     c = discord.ui.Container(accent_colour=ACCENT)
-    c.add_item(
-        discord.ui.Section(
-            text(
-                f"-# 🤝 URA's New Alliance!\n## {rec['name']}\n"
-                f"URA now stands beside **{rec['name']}**. Backup flows both ways from today."
-            ),
-            text(
-                f"**Owner:** <@{rec['owner_id']}>\n"
-                f"**Type:** {rec['kind'].title()}\n"
-                f"**Server ID:** `{rec['guild_id']}`\n"
-                f"**Members:** `{rec['members']:,} • {rec['online']:,} online`\n"
-                f"**Alliance ID:** `{rec['code']}`\n"
-                f"**Allied since:** <t:{rec['created_at']}:D>"
-            ),
-            accessory=discord.ui.Thumbnail(rec["icon_url"]),
-        )
+    head = text(
+        f"-# 🤝 URA's New Alliance!\n## {rec['name']}\n"
+        f"URA now stands beside **{rec['name']}**. Backup flows both ways from today."
     )
+    details = text(
+        f"**Owner:** <@{rec['owner_id']}>\n"
+        f"**Type:** {rec['kind'].title()}\n"
+        f"**Server ID:** `{rec['guild_id']}`\n"
+        f"**Members:** `{rec['members']:,} • {rec['online']:,} online`\n"
+        f"**Alliance ID:** `{rec['code']}`\n"
+        f"**Allied since:** <t:{rec['created_at']}:D>"
+    )
+    if rec.get("icon_url"):
+        c.add_item(discord.ui.Section(head, details, accessory=discord.ui.Thumbnail(rec["icon_url"])))
+    else:
+        c.add_item(head)
+        c.add_item(details)
     c.add_item(sep())
     c.add_item(text(f"## What is {rec['name']}?\n{rec['bio_what']}"))
     c.add_item(sep())
@@ -372,7 +335,7 @@ async def publish(rec: dict, editing: bool):
 
 
 async def post_panel(channel: discord.TextChannel):
-    msg = await channel.send(view=build_hub(), file=banner_file())
+    msg = await channel.send(view=build_hub())
     store.set_meta("request_channel_id", str(channel.id))
     store.set_meta("panel_channel_id", str(channel.id))
     store.set_meta("panel_message_id", str(msg.id))
@@ -388,7 +351,8 @@ async def ensure_panel():
     stored_ch = get_channel_id("panel_channel_id")
     if stored_msg and stored_ch == channel_id:
         try:
-            await channel.get_partial_message(stored_msg).edit(view=build_hub(), attachments=[banner_file()])
+            # attachments=[] also clears any old banner file from a previous panel message
+            await channel.get_partial_message(stored_msg).edit(view=build_hub(), attachments=[])
             return
         except discord.NotFound:
             pass
@@ -562,7 +526,7 @@ async def show_preview(interaction, existing, info, kind, style, what, why):
         "bio_type": style,
         "bio_what": what,
         "bio_why": why,
-        "icon_url": info["icon_url"] or hs_url(),
+        "icon_url": info["icon_url"],
         "channel_id": existing["channel_id"] if existing else None,
         "message_id": existing["message_id"] if existing else None,
         "created_at": existing["created_at"] if existing else int(time.time()),
@@ -625,7 +589,20 @@ async def request_channel_cmd(interaction: discord.Interaction, channel: discord
             await (await get_channel(old_ch)).get_partial_message(old_msg).delete()
         except discord.HTTPException:
             pass
-    msg = await post_panel(channel)
+    try:
+        msg = await post_panel(channel)
+    except discord.Forbidden:
+        return await interaction.followup.send(
+            f"❌ Discord blocked me from posting in {channel.mention}. Check my channel permissions "
+            "(View Channel, Send Messages, Read Message History) and that no channel override denies them.",
+            ephemeral=True,
+        )
+    except discord.HTTPException as e:
+        print(f"Panel post failed: {e!r}")
+        return await interaction.followup.send(f"❌ Couldn't post the panel: `{e.text or e}`", ephemeral=True)
+    except Exception as e:
+        print(f"Panel post failed: {e!r}")
+        return await interaction.followup.send(f"❌ Unexpected error: `{e!r}`", ephemeral=True)
     await interaction.followup.send(f"Panel posted in {channel.mention}. [Open it]({msg.jump_url})", ephemeral=True)
 
 
@@ -688,6 +665,16 @@ async def unally_cmd(interaction: discord.Interaction, server_id: str | None = N
         )
     )
     await interaction.response.send_message(view=view, ephemeral=True)
+
+
+@bot.tree.error
+async def on_tree_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
+    print(f"Command error: {error!r}")
+    send = interaction.followup.send if interaction.response.is_done() else interaction.response.send_message
+    try:
+        await send("Something went wrong running that command.", ephemeral=True)
+    except discord.HTTPException:
+        pass
 
 
 if __name__ == "__main__":
