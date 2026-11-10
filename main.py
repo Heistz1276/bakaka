@@ -22,6 +22,8 @@ load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
 DB_PATH = os.getenv("DB_PATH", "alliances.sqlite3")
 HANDSHAKE_FILE = Path(__file__).with_name("handshake.png")
+BANNER_FILE = Path(__file__).with_name("banner.png")
+BANNER_NAME = "ura_banner.png"
 HANDSHAKE_FALLBACK_URL = "https://cdn.jsdelivr.net/gh/jdecked/twemoji@latest/assets/72x72/1f91d.png"
 MIN_MEMBERS = 50
 ACCENT = discord.Colour(0xC23B4E)
@@ -124,9 +126,6 @@ class Bot(commands.Bot):
     async def setup_hook(self):
         await load_handshake()
         self.add_view(build_hub())
-        cancel_holder = discord.ui.LayoutView(timeout=None)
-        cancel_holder.add_item(discord.ui.Container(discord.ui.ActionRow(cancel_button())))
-        self.add_view(cancel_holder)
         await sync_if_changed()
 
     async def on_ready(self):
@@ -208,6 +207,10 @@ async def get_channel(channel_id: int):
     return bot.get_channel(channel_id) or await bot.fetch_channel(channel_id)
 
 
+def banner_file() -> discord.File:
+    return discord.File(BANNER_FILE, filename=BANNER_NAME)
+
+
 def can_post(channel: discord.abc.GuildChannel) -> bool:
     perms = channel.permissions_for(channel.guild.me)
     return perms.view_channel and perms.send_messages and perms.read_message_history
@@ -250,17 +253,10 @@ def guide_button() -> discord.ui.Button:
     return b
 
 
-def cancel_button() -> discord.ui.Button:
-    b = discord.ui.Button(
-        style=discord.ButtonStyle.secondary, label="Cancel Partnership", emoji="✖️", custom_id="ura:cancel"
-    )
-    b.callback = on_cancel
-    return b
-
-
 def build_hub() -> discord.ui.LayoutView:
     view = discord.ui.LayoutView(timeout=None)
     c = discord.ui.Container(accent_colour=ACCENT)
+    c.add_item(discord.ui.MediaGallery(discord.MediaGalleryItem(f"attachment://{BANNER_NAME}")))
     c.add_item(discord.ui.Section(text("# Partnership Request"), accessory=guide_button()))
     c.add_item(
         discord.ui.Section(
@@ -297,7 +293,7 @@ def build_hub() -> discord.ui.LayoutView:
         style=discord.ButtonStyle.secondary, label="Create Partnership", emoji=hs_emoji(), custom_id="ura:create"
     )
     edit = discord.ui.Button(
-        style=discord.ButtonStyle.secondary, label="Edit My Partnership", emoji=hs_emoji(), custom_id="ura:edit"
+        style=discord.ButtonStyle.secondary, label="Edit My Partnership", emoji="🎨", custom_id="ura:edit"
     )
     create.callback = on_create
     edit.callback = on_edit
@@ -317,7 +313,7 @@ def simple_view(message: str, *, accessory=None) -> discord.ui.LayoutView:
     return view
 
 
-def ally_view(rec: dict, *, live=False, timeout=None, top=(), bottom=()) -> discord.ui.LayoutView:
+def ally_view(rec: dict, *, timeout=None, top=(), bottom=()) -> discord.ui.LayoutView:
     view = discord.ui.LayoutView(timeout=timeout)
     for item in top:
         view.add_item(item)
@@ -348,8 +344,6 @@ def ally_view(rec: dict, *, live=False, timeout=None, top=(), bottom=()) -> disc
         style=discord.ButtonStyle.link, label="Click Here To Join", emoji="🔗", url=rec["invite_url"]
     )
     c.add_item(discord.ui.Section(text("## Join now !"), accessory=join))
-    if live:
-        c.add_item(discord.ui.ActionRow(cancel_button()))
     view.add_item(c)
     for item in bottom:
         view.add_item(item)
@@ -360,7 +354,7 @@ def ally_view(rec: dict, *, live=False, timeout=None, top=(), bottom=()) -> disc
 async def publish(rec: dict, editing: bool):
     """Post or update the partnership message. Returns the message (or partial message)."""
     no_pings = discord.AllowedMentions.none()
-    view = ally_view(rec, live=True)
+    view = ally_view(rec)
     if editing and rec.get("message_id") and rec.get("channel_id"):
         try:
             channel = await get_channel(rec["channel_id"])
@@ -378,7 +372,7 @@ async def publish(rec: dict, editing: bool):
 
 
 async def post_panel(channel: discord.TextChannel):
-    msg = await channel.send(view=build_hub())
+    msg = await channel.send(view=build_hub(), file=banner_file())
     store.set_meta("request_channel_id", str(channel.id))
     store.set_meta("panel_channel_id", str(channel.id))
     store.set_meta("panel_message_id", str(msg.id))
@@ -394,7 +388,7 @@ async def ensure_panel():
     stored_ch = get_channel_id("panel_channel_id")
     if stored_msg and stored_ch == channel_id:
         try:
-            await channel.get_partial_message(stored_msg).edit(view=build_hub())
+            await channel.get_partial_message(stored_msg).edit(view=build_hub(), attachments=[banner_file()])
             return
         except discord.NotFound:
             pass
@@ -411,7 +405,7 @@ async def on_guide(interaction: discord.Interaction):
             "**3.** Your server name and member count are read from the invite automatically.\n"
             "**4.** Pick **Default** and we write your bio, or **Customized** and you'll write your own next.\n"
             "**5.** Check the preview and post it. Your partnership goes live.\n"
-            "**6.** Need changes? Press **Edit My Partnership**. To end it, press **Cancel Partnership** on your post."
+            "**6.** Need changes? Press **Edit My Partnership**. To end it, use **/unally**."
         ),
         ephemeral=True,
     )
@@ -436,42 +430,6 @@ async def on_edit(interaction: discord.Interaction):
             "You don't have a partnership yet. Press **Create Partnership** first.", ephemeral=True
         )
     await interaction.response.send_modal(LinkModal(dict(existing)))
-
-
-async def on_cancel(interaction: discord.Interaction):
-    rec = store.by_message(interaction.message.id) if interaction.message else None
-    if not rec:
-        return await interaction.response.send_message("This partnership is no longer active.", ephemeral=True)
-    if interaction.user.id != rec["owner_id"] and not await bot.is_owner(interaction.user):
-        return await interaction.response.send_message(
-            "Only the partnership owner can cancel this partnership.", ephemeral=True
-        )
-
-    async def yes(i: discord.Interaction):
-        await i.response.defer()
-        try:
-            channel = await get_channel(rec["channel_id"])
-            await channel.get_partial_message(rec["message_id"]).delete()
-        except discord.HTTPException:
-            pass
-        store.delete(rec["owner_id"])
-        await i.edit_original_response(view=simple_view(f"Partnership with **{rec['name']}** cancelled."))
-
-    async def no(i: discord.Interaction):
-        await i.response.edit_message(view=simple_view("Kept. Nothing changed."))
-
-    y = discord.ui.Button(style=discord.ButtonStyle.danger, label="Yes, cancel it")
-    n = discord.ui.Button(style=discord.ButtonStyle.secondary, label="Keep it")
-    y.callback, n.callback = yes, no
-    view = discord.ui.LayoutView(timeout=120)
-    view.add_item(
-        discord.ui.Container(
-            text(f"### Cancel this partnership?\nThis removes the partnership with **{rec['name']}**."),
-            discord.ui.ActionRow(y, n),
-            accent_colour=ACCENT,
-        )
-    )
-    await interaction.response.send_message(view=view, ephemeral=True)
 
 
 # --------------------------------------------------------------------------- modals
@@ -685,6 +643,51 @@ async def alliance_channel_cmd(interaction: discord.Interaction, channel: discor
         )
     store.set_meta("alliance_channel_id", str(channel.id))
     await interaction.response.send_message(f"New partnerships will be posted in {channel.mention}.", ephemeral=True)
+
+
+@bot.tree.command(name="unally", description="Cancel a partnership.")
+@app_commands.guild_only()
+@app_commands.describe(server_id="Allied server ID (bot owner only). Leave empty to cancel your own partnership.")
+async def unally_cmd(interaction: discord.Interaction, server_id: str | None = None):
+    is_bot_owner = await bot.is_owner(interaction.user)
+    if server_id:
+        if not is_bot_owner:
+            return await interaction.response.send_message(
+                "Only the bot owner can cancel another server's partnership.", ephemeral=True
+            )
+        if not server_id.isdigit():
+            return await interaction.response.send_message("Server ID must be a number.", ephemeral=True)
+        rec = store.by_guild(int(server_id))
+    else:
+        rec = store.by_owner(interaction.user.id)
+    if not rec:
+        return await interaction.response.send_message("No partnership found.", ephemeral=True)
+
+    async def yes(i: discord.Interaction):
+        await i.response.defer()
+        try:
+            channel = await get_channel(rec["channel_id"])
+            await channel.get_partial_message(rec["message_id"]).delete()
+        except (discord.HTTPException, TypeError):
+            pass
+        store.delete(rec["owner_id"])
+        await i.edit_original_response(view=simple_view(f"Partnership with **{rec['name']}** cancelled."))
+
+    async def no(i: discord.Interaction):
+        await i.response.edit_message(view=simple_view("Kept. Nothing changed."))
+
+    y = discord.ui.Button(style=discord.ButtonStyle.danger, label="Yes, cancel it")
+    n = discord.ui.Button(style=discord.ButtonStyle.secondary, label="Keep it")
+    y.callback, n.callback = yes, no
+    view = discord.ui.LayoutView(timeout=120)
+    view.add_item(
+        discord.ui.Container(
+            text(f"### Cancel this partnership?\nThis removes the partnership with **{rec['name']}**."),
+            discord.ui.ActionRow(y, n),
+            accent_colour=ACCENT,
+        )
+    )
+    await interaction.response.send_message(view=view, ephemeral=True)
 
 
 if __name__ == "__main__":
