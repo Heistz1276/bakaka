@@ -3,6 +3,7 @@
 Setup in your server (owner / Manage Server):
   /request-channel #channel   -> where the Partnership Request panel lives
   /alliance-channel #channel  -> where finished partnerships are posted
+  /unally [server]            -> cancel a partnership (staff can pick any ally)
 """
 import os
 import random
@@ -21,7 +22,7 @@ load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
 DB_PATH = os.getenv("DB_PATH", "alliances.sqlite3")
 MIN_MEMBERS = 50
-ACCENT = discord.Colour(0xC23B4E)
+ACCENT = discord.Colour(0x000000)  # black border (0x1E1F22 gives a subtle visible edge on dark theme)
 SHOW_SERVER_ICON = True  # set False to remove the allied server's icon from listings too
 
 DEFAULT_BIOS = {
@@ -86,6 +87,9 @@ class Store:
 
     def by_message(self, message_id: int):
         return self.db.execute("SELECT * FROM alliances WHERE message_id=?", (message_id,)).fetchone()
+
+    def all(self):
+        return self.db.execute("SELECT guild_id, name FROM alliances ORDER BY name").fetchall()
 
     def code_taken(self, code: str) -> bool:
         return self.db.execute("SELECT 1 FROM alliances WHERE code=?", (code,)).fetchone() is not None
@@ -162,6 +166,10 @@ def new_code() -> str:
 async def sync_if_changed():
     """Only call Discord's sync endpoint when the command list actually changed."""
     signature = ",".join(sorted(c.qualified_name for c in bot.tree.get_commands()))
+    # include option names so renamed options trigger a re-sync
+    signature += "|" + ",".join(
+        sorted(f"{c.qualified_name}:{p.name}" for c in bot.tree.get_commands() for p in c.parameters)
+    )
     if store.get_meta("command_signature") != signature:
         await bot.tree.sync()
         store.set_meta("command_signature", signature)
@@ -559,7 +567,7 @@ async def show_preview(interaction, existing, info, kind, style, what, why):
     ok.callback, no.callback = confirm, cancel
     notice = discord.ui.Container(
         text("### 👀 Preview\nThis is how your partnership will be announced."),
-        accent_colour=discord.Colour(0xE0B457),
+        accent_colour=ACCENT,
     )
     view = ally_view(rec, timeout=600, top=[notice], bottom=[discord.ui.ActionRow(ok, no)])
     await interaction.followup.send(view=view, ephemeral=True)
@@ -622,19 +630,33 @@ async def alliance_channel_cmd(interaction: discord.Interaction, channel: discor
     await interaction.response.send_message(f"New partnerships will be posted in {channel.mention}.", ephemeral=True)
 
 
+async def allied_autocomplete(interaction: discord.Interaction, current: str):
+    if not (is_staff(interaction) or await bot.is_owner(interaction.user)):
+        return []
+    cur = current.lower()
+    return [
+        app_commands.Choice(name=r["name"][:100], value=str(r["guild_id"]))
+        for r in store.all()
+        if cur in r["name"].lower() or cur in str(r["guild_id"])
+    ][:25]
+
+
 @bot.tree.command(name="unally", description="Cancel a partnership.")
 @app_commands.guild_only()
-@app_commands.describe(server_id="Allied server ID (bot owner only). Leave empty to cancel your own partnership.")
-async def unally_cmd(interaction: discord.Interaction, server_id: str | None = None):
-    is_bot_owner = await bot.is_owner(interaction.user)
-    if server_id:
-        if not is_bot_owner:
+@app_commands.describe(server="Allied server to un-ally (staff only). Leave empty to cancel your own partnership.")
+@app_commands.autocomplete(server=allied_autocomplete)
+async def unally_cmd(interaction: discord.Interaction, server: str | None = None):
+    can_manage = is_staff(interaction) or await bot.is_owner(interaction.user)
+    if server:
+        if not can_manage:
             return await interaction.response.send_message(
-                "Only the bot owner can cancel another server's partnership.", ephemeral=True
+                "You need Manage Server to cancel another server's partnership.", ephemeral=True
             )
-        if not server_id.isdigit():
-            return await interaction.response.send_message("Server ID must be a number.", ephemeral=True)
-        rec = store.by_guild(int(server_id))
+        if not server.isdigit():
+            return await interaction.response.send_message(
+                "Pick a server from the list, or paste its server ID.", ephemeral=True
+            )
+        rec = store.by_guild(int(server))
     else:
         rec = store.by_owner(interaction.user.id)
     if not rec:
