@@ -25,20 +25,210 @@ MIN_MEMBERS = 50
 ACCENT = discord.Colour(0x000000)  # black border (0x1E1F22 gives a subtle visible edge on dark theme)
 SHOW_SERVER_ICON = True  # set False to remove the allied server's icon from listings too
 
+# Custom handshake emoji. On startup the bot looks for an application emoji named "handshake";
+# if it doesn't exist it uploads handshake.png (next to this file) automatically.
+# To use an emoji you already have, put its full form in .env, e.g. HANDSHAKE_EMOJI=<:handshake:123456789012345678>
+HANDSHAKE_NAME = "handshake"
+HANDSHAKE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "handshake.png")
+handshake = discord.PartialEmoji.from_str("🤝")  # fallback until the custom one loads
+
+# Default bios: 15 variants per server type. One is picked at random every time (never the same one twice in a row).
+# Each entry is (what_is_your_server, why_join). {name} is replaced with the server's name.
 DEFAULT_BIOS = {
-    "clan": (
-        "{name} is a TSB clan built on teamwork, discipline and steady improvement. "
-        "We train together, back each other up in fights, and push for the top as one squad.",
-        "Join for active members, fair leadership and people who actually show up. "
-        "New or experienced, you'll find a squad to grow with and allies who have your back.",
-    ),
-    "community": (
-        "{name} is a friendly TSB community where players meet, hang out and find teammates. "
-        "It's a relaxed place to talk strategy, share plays and join events.",
-        "Come for the good company and stay for the events, helpful members and welcoming vibe. "
-        "Everyone is welcome to learn, play and grow with us.",
-    ),
+    "clan": [
+        (
+            "{name} is a TSB clan built on teamwork, discipline and steady improvement. "
+            "We train together, back each other up in fights, and push for the top as one squad.",
+            "Join for active members, fair leadership and people who actually show up. "
+            "New or experienced, you'll find a squad to grow with and allies who have your back.",
+        ),
+        (
+            "{name} is a competitive TSB clan where every member fights for the squad. "
+            "We spar, review our fights and sharpen our skills together every week.",
+            "Join if you want active teammates, honest feedback and a clan that backs you in every fight. "
+            "Whatever your skill level, there's a spot for you.",
+        ),
+        (
+            "{name} is a close-knit TSB clan focused on loyalty and real improvement. "
+            "Our members train daily and never leave a teammate fighting alone.",
+            "You'll find reliable teammates, regular training and leaders who listen. "
+            "If you want a clan that actually stays active, this is it.",
+        ),
+        (
+            "{name} is a rising TSB clan with a simple goal: get stronger together. "
+            "We run training sessions, group fights and friendly spars to keep everyone improving.",
+            "Come grow with a squad that celebrates progress and helps you fix your weak spots. "
+            "Everyone starts somewhere, and we'll help you climb.",
+        ),
+        (
+            "{name} is an organized TSB clan that values discipline, respect and teamwork. "
+            "We play as a unit and take every fight with a plan.",
+            "Join for fair leadership, clear structure and a squad that respects its members. "
+            "You'll always know where you stand and who has your back.",
+        ),
+        (
+            "{name} is a TSB clan of dedicated players who love the grind. "
+            "We hop into servers as a group, practice combos and help each other master the game.",
+            "If you want to level up your gameplay with people who care, you belong here. "
+            "Our members share tips, plays and wins every day.",
+        ),
+        (
+            "{name} is a battle-ready TSB clan that stands strong against unfair fights. "
+            "We protect our own and answer when our allies call for backup.",
+            "Join a clan that never leaves you outnumbered. "
+            "Strong teammates, quick backup and a squad that fights as one.",
+        ),
+        (
+            "{name} is a TSB clan that mixes serious training with a good time. "
+            "We take fights seriously, but we never forget to enjoy playing together.",
+            "You'll get skilled teammates, active chats and plenty of fights to jump into. "
+            "Come for the competition and stay for the squad.",
+        ),
+        (
+            "{name} is a growing TSB clan built by players who wanted a better team experience. "
+            "We focus on activity, communication and loyalty.",
+            "Join for active members, clear communication and leaders who show up. "
+            "We want players who commit, and a clan that commits back.",
+        ),
+        (
+            "{name} is a TSB clan where skill meets teamwork. "
+            "We study the meta, refine our strategies and bring that energy to every fight.",
+            "New or experienced, you'll learn faster with teammates who share what works. "
+            "Join us and turn good fights into great ones.",
+        ),
+        (
+            "{name} is a tight, active TSB clan that fights for its name. "
+            "Our squad trains hard, plays fair and always shows up for its members.",
+            "If you want real teamwork and no empty promises, join us. "
+            "Our members stand together in every fight, win or lose.",
+        ),
+        (
+            "{name} is a dedicated TSB clan with a strong sense of unity. "
+            "We organize regular sessions, group up for big fights and keep our members sharp.",
+            "Join a clan that rewards effort and treats every member with respect. "
+            "Great teammates and constant action are waiting for you.",
+        ),
+        (
+            "{name} is a TSB clan that believes strong teams are built on trust. "
+            "We have each other's backs and keep our squad active and motivated.",
+            "Find a home where your effort is noticed and your growth matters. "
+            "Join us and fight alongside people who truly have your back.",
+        ),
+        (
+            "{name} is a fearless TSB clan that takes on any challenge as a team. "
+            "We train, strategize and push each other to be better every day.",
+            "Join for the action, the teamwork and the push to improve. "
+            "With us you'll never fight alone.",
+        ),
+        (
+            "{name} is a loyal TSB clan with a hunger to improve. "
+            "From practice sessions to big fights, our squad moves together.",
+            "Be part of a team that celebrates your wins and helps you through your losses. "
+            "Active players, fair leaders and allies ready to help.",
+        ),
+    ],
+    "community": [
+        (
+            "{name} is a friendly TSB community where players meet, hang out and find teammates. "
+            "It's a relaxed place to talk strategy, share plays and join events.",
+            "Come for the good company and stay for the events, helpful members and welcoming vibe. "
+            "Everyone is welcome to learn, play and grow with us.",
+        ),
+        (
+            "{name} is an active TSB community for players who love the game. "
+            "Chat, share clips, find teammates and jump into fights with people who enjoy it as much as you do.",
+            "Join for friendly members, constant activity and a place where everyone fits in. "
+            "There's always someone online to play with.",
+        ),
+        (
+            "{name} is a welcoming TSB hub where players learn, trade tips and find their squad. "
+            "Beginners and veterans share the same space.",
+            "Get advice from experienced players, find teammates and never run out of people to fight with. "
+            "Come hang out and level up.",
+        ),
+        (
+            "{name} is a laid-back TSB community with a competitive streak. "
+            "We host events, spar sessions and game nights for all skill levels.",
+            "You'll find a friendly crowd, fun events and plenty of chances to improve. "
+            "Join and make the game more fun.",
+        ),
+        (
+            "{name} is a TSB community built around good vibes and great fights. "
+            "Members meet here to talk strategy, form teams and celebrate clutch plays.",
+            "Come for the fights, stay for the people. "
+            "Our members are helpful, active and always ready for the next match.",
+        ),
+        (
+            "{name} is a growing TSB community where everyone gets a voice. "
+            "We share combos, post highlights and organize events for members.",
+            "Join a server with real activity and a friendly staff team. "
+            "Whatever your playstyle, you'll find people who share it.",
+        ),
+        (
+            "{name} is a TSB community made for players who want more than random servers. "
+            "Find teammates, join sessions and meet people who love the game.",
+            "Skip playing alone. Here you'll find active chats, friendly faces "
+            "and teammates ready to jump in whenever you are.",
+        ),
+        (
+            "{name} is a TSB community focused on fun, fair play and helping each other improve. "
+            "Everyone is welcome, from first-timers to top fighters.",
+            "Join for helpful members, active events and a respectful environment. "
+            "We keep the vibes good and the fights better.",
+        ),
+        (
+            "{name} is an energetic TSB community that lives for good fights. "
+            "We run events, tournaments and casual sessions throughout the week.",
+            "There's always something happening here. "
+            "Jump in, meet new friends and show off your skills.",
+        ),
+        (
+            "{name} is a friendly TSB community where players share strategies, clips and funny moments. "
+            "A relaxed server with an active, welcoming crowd.",
+            "Join for easy-going members and a vibe that makes the game better. "
+            "A great place to find sparring partners and friends.",
+        ),
+        (
+            "{name} is a TSB community that brings players together. "
+            "We help newcomers learn the game and give experienced players a place to show their skills.",
+            "Whether you're learning or already great, you'll find your place here. "
+            "Friendly members, real activity and a community that welcomes everyone.",
+        ),
+        (
+            "{name} is a well-run TSB community with active staff and an even more active member base. "
+            "We keep things organized, fair and fun.",
+            "Join for a clean, friendly server with plenty to do. "
+            "Fair moderation, great people and always someone ready to fight.",
+        ),
+        (
+            "{name} is a TSB community built by players, for players. "
+            "We celebrate skill, support improvement and keep the atmosphere welcoming.",
+            "Come meet people who love TSB as much as you. "
+            "Learn new tricks, find teammates and enjoy a community that has your back.",
+        ),
+        (
+            "{name} is a lively TSB community with game nights, sparring sessions and endless talk about strategy. "
+            "Every member helps make the server what it is.",
+            "Join and be part of something active. "
+            "Friendly people, fun events and a community that grows with you.",
+        ),
+        (
+            "{name} is a TSB community where friendships and fights go hand in hand. "
+            "We welcome players of every level and keep the energy high.",
+            "Find your crew, sharpen your skills and enjoy a server that actually stays active. "
+            "Come join the fun.",
+        ),
+    ],
 }
+
+
+def pick_default_bio(kind: str, name: str, avoid_what: str | None = None) -> tuple[str, str]:
+    """Pick a random default bio for this server type, skipping the one currently in use."""
+    options = DEFAULT_BIOS.get(kind) or DEFAULT_BIOS["clan"]
+    filled = [(w.replace("{name}", name), y.replace("{name}", name)) for w, y in options]
+    pool = [b for b in filled if b[0] != avoid_what] or filled
+    return random.choice(pool)
+
 
 INVITE_RE = re.compile(
     r"(?:https?://)?(?:www\.)?(?:discord\.gg|discord(?:app)?\.com/invite)/([A-Za-z0-9-]+)",
@@ -122,6 +312,7 @@ class Bot(commands.Bot):
         self.ready_once = False
 
     async def setup_hook(self):
+        await load_handshake_emoji()
         self.add_view(build_hub())
         await sync_if_changed()
 
@@ -149,6 +340,28 @@ def sep() -> discord.ui.Separator:
 
 def text(content: str) -> discord.ui.TextDisplay:
     return discord.ui.TextDisplay(content)
+
+
+async def load_handshake_emoji():
+    """Find (or upload) the custom handshake emoji and store it in the global `handshake`."""
+    global handshake
+    override = os.getenv("HANDSHAKE_EMOJI", "").strip()
+    try:
+        if override:
+            handshake = discord.PartialEmoji.from_str(override)
+            return
+        for emoji in await bot.fetch_application_emojis():
+            if emoji.name == HANDSHAKE_NAME:
+                handshake = discord.PartialEmoji.from_str(str(emoji))
+                return
+        if os.path.exists(HANDSHAKE_FILE):
+            with open(HANDSHAKE_FILE, "rb") as f:
+                emoji = await bot.create_application_emoji(name=HANDSHAKE_NAME, image=f.read())
+            handshake = discord.PartialEmoji.from_str(str(emoji))
+        else:
+            print(f"{HANDSHAKE_FILE} not found, using the default 🤝 emoji.")
+    except Exception as e:
+        print(f"Could not load the custom handshake emoji, using 🤝 instead: {e!r}")
 
 
 def clean(value: str) -> str:
@@ -261,7 +474,7 @@ def build_hub() -> discord.ui.LayoutView:
     )
     c.add_item(sep())
     create = discord.ui.Button(
-        style=discord.ButtonStyle.secondary, label="Create Partnership", emoji="🤝", custom_id="ura:create"
+        style=discord.ButtonStyle.secondary, label="Create Partnership", emoji=handshake, custom_id="ura:create"
     )
     edit = discord.ui.Button(
         style=discord.ButtonStyle.secondary, label="Edit My Partnership", emoji="🎨", custom_id="ura:edit"
@@ -290,11 +503,11 @@ def ally_view(rec: dict, *, timeout=None, top=(), bottom=()) -> discord.ui.Layou
         view.add_item(item)
     c = discord.ui.Container(accent_colour=ACCENT)
     head = text(
-        f"-# 🤝 URA's New Alliance!\n## {rec['name']}\n"
+        f"-# {handshake} URA's New Alliance!\n## {rec['name']}\n"
         f"URA now stands beside **{rec['name']}**. Backup flows both ways from today."
     )
     details = text(
-        f"**Owner:** <@{rec['owner_id']}>\n"
+        f"**Representative:** <@{rec['owner_id']}>\n"
         f"**Type:** {rec['kind'].title()}\n"
         f"**Server ID:** `{rec['guild_id']}`\n"
         f"**Members:** `{rec['members']:,} • {rec['online']:,} online`\n"
@@ -496,7 +709,7 @@ async def handle_link(interaction, existing, link, kind, style):
         return await interaction.followup.send(f"❌ {problem}", ephemeral=True)
 
     if style == "default":
-        what, why = (t.replace("{name}", info["name"]) for t in DEFAULT_BIOS[kind])
+        what, why = pick_default_bio(kind, info["name"], avoid_what=existing["bio_what"] if existing else None)
         return await show_preview(interaction, existing, info, kind, style, what, why)
 
     old_what = existing["bio_what"] if existing and existing["bio_type"] == "custom" else ""
